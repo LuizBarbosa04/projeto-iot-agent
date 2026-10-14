@@ -1,0 +1,6 @@
+{
+  "dispositivo": "esp32-simulado-01",
+  "temperatura": 27.5,
+  "umidade": 68,
+  "status": "online"
+}
