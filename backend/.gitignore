@@ -1,4 +1,28 @@
+
+# Ambientes virtuais
 .venv/
+venv/
+
+# Cache do Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Variáveis de ambiente e credenciais
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# Configurações locais
+.vscode/
+.idea/
+
+# Logs
+*.log
