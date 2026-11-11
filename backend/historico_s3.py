@@ -3,18 +3,27 @@ import json
 
 import boto3
 
+
 BUCKET = "scopo-estudo-luiz-2026"
 
-session = boto3.Session(
-    profile_name="scopo-lab",
-    region_name="us-east-2"
-)
 
-s3 = session.client("s3")
+def criar_cliente_s3():
+    """Cria o cliente AWS S3 somente quando necessário."""
+
+    session = boto3.Session(
+        profile_name="scopo-lab",
+        region_name="us-east-2"
+    )
+
+    return session.client("s3")
 
 
 def consultar_historico():
+    """Consulta e retorna as leituras de telemetria armazenadas no S3."""
+
     historico = []
+
+    s3 = criar_cliente_s3()
 
     paginador = s3.get_paginator("list_objects_v2")
 
@@ -36,7 +45,10 @@ def consultar_historico():
             )
 
             conteudo = resposta["Body"].read()
-            dados = json.loads(conteudo.decode("utf-8"))
+
+            dados = json.loads(
+                conteudo.decode("utf-8")
+            )
 
             historico.append(dados)
 
@@ -52,9 +64,13 @@ if __name__ == "__main__":
 
     for indice, leitura in enumerate(leituras, start=1):
         print(f"LEITURA {indice}")
-        print(json.dumps(
-            leitura,
-            indent=4,
-            ensure_ascii=False
-        ))
+
+        print(
+            json.dumps(
+                leitura,
+                indent=4,
+                ensure_ascii=False
+            )
+        )
+
         print()
