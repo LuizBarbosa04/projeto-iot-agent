@@ -1,142 +1,221 @@
 
-from datetime import datetime
+from pathlib import Path
+from datetime import datetime, timezone
 
 import matplotlib.pyplot as plt
+from matplotlib.dates import DateFormatter, AutoDateLocator
 
 from historico_s3 import consultar_historico
 
-from detector import detectar_anomalias
+
+# Configurações
+DIRETORIO_BASE = Path(__file__).resolve().parent
+DIRETORIO_ASSETS = DIRETORIO_BASE / "assets"
+CAMINHO_GRAFICO = DIRETORIO_ASSETS / "historico_sensores.png"
+
+TEMPERATURA_MINIMA = 20
+TEMPERATURA_MAXIMA = 35
+
+UMIDADE_MINIMA = 40
+UMIDADE_MAXIMA = 80
+
+
+def converter_data(valor):
+    """Converte uma data ISO 8601 para datetime com fuso horário."""
+
+    if isinstance(valor, datetime):
+        return valor if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
+
+    if not isinstance(valor, str):
+        raise ValueError("Data inválida")
+
+    data = datetime.fromisoformat(valor.replace("Z", "+00:00"))
+
+    if data.tzinfo is None:
+        data = data.replace(tzinfo=timezone.utc)
+
+    return data.astimezone(timezone.utc)
 
 
 def gerar_graficos():
-    print("Consultando histórico no Amazon S3...")
+    """Consulta o histórico no S3 e gera gráficos de temperatura e umidade."""
 
-    leituras = consultar_historico()
+    print("Consultando histórico de telemetria no Amazon S3...")
 
-    if not leituras:
-        print("Nenhuma leitura encontrada.")
+    historico = consultar_historico()
+
+    if not historico:
+        print("Nenhum dado de telemetria encontrado.")
         return
 
-    # Ordenar os registros pela data da medição
-    leituras.sort(key=lambda item: item["timestamp"])
+    leituras = []
 
-    datas = [
-        datetime.fromisoformat(item["timestamp"])
-        for item in leituras
+    for registro in historico:
+        try:
+            data = converter_data(registro["timestamp"])
+            temperatura = float(registro["temperatura"])
+            umidade = float(registro["umidade"])
+
+            leituras.append(
+                {
+                    "data": data,
+                    "temperatura": temperatura,
+                    "umidade": umidade,
+                }
+            )
+
+        except (KeyError, TypeError, ValueError) as erro:
+            print(f"Registro ignorado por dados inválidos: {erro}")
+
+    if not leituras:
+        print("Nenhuma leitura válida disponível para gerar gráficos.")
+        return
+
+    # Organizar leituras cronologicamente
+    leituras.sort(key=lambda registro: registro["data"])
+
+    datas = [registro["data"] for registro in leituras]
+    temperaturas = [registro["temperatura"] for registro in leituras]
+    umidades = [registro["umidade"] for registro in leituras]
+
+    # Detectar anomalias utilizando os limites de monitoramento
+    anomalias_temperatura = [
+        valor < TEMPERATURA_MINIMA or valor > TEMPERATURA_MAXIMA
+        for valor in temperaturas
     ]
 
-    temperaturas = [
-        item["temperatura"]
-        for item in leituras
+    anomalias_umidade = [
+        valor < UMIDADE_MINIMA or valor > UMIDADE_MAXIMA
+        for valor in umidades
     ]
 
-    umidades = [
-        item["umidade"]
-        for item in leituras
-    ]
-
-    anomalias_temperatura = []
-    anomalias_umidade = []
-
-    for leitura in leituras:
-        resultado = detectar_anomalias(
-            leitura["temperatura"],
-            leitura["umidade"]
-        )
-
-        anomalias_temperatura.append(
-            any("Temperatura" in alerta for alerta in resultado["alertas"])
-        )
-
-        anomalias_umidade.append(
-            any("Umidade" in alerta for alerta in resultado["alertas"])
-        )
-
+    # Criar figura com dois gráficos
     fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(11, 7), sharex=True
+        2,
+        1,
+        figsize=(13, 9),
+        sharex=True,
     )
 
     # Gráfico de temperatura
-    ax1.plot(datas, temperaturas, marker="o")
+    ax1.plot(
+        datas,
+        temperaturas,
+        marker="o",
+        label="Temperatura",
+    )
+
     ax1.scatter(
-        [data for data, alerta in zip(datas, anomalias_temperatura) if alerta],
-        [valor for valor, alerta in zip(temperaturas, anomalias_temperatura) if alerta],
+        [
+            data
+            for data, alerta in zip(datas, anomalias_temperatura)
+            if alerta
+        ],
+        [
+            valor
+            for valor, alerta in zip(temperaturas, anomalias_temperatura)
+            if alerta
+        ],
         color="red",
         s=100,
         zorder=5,
-        label="Anomalia detectada"
+        label="Anomalia detectada",
     )
+
     ax1.axhline(
-        y=35,
+        y=TEMPERATURA_MAXIMA,
         color="red",
         linestyle="--",
-        label="Limite máximo: 35 °C"
+        label=f"Limite máximo: {TEMPERATURA_MAXIMA} °C",
     )
+
     ax1.axhline(
-        y=20,
+        y=TEMPERATURA_MINIMA,
         color="orange",
         linestyle="--",
-        label="Limite mínimo: 20 °C"
+        label=f"Limite mínimo: {TEMPERATURA_MINIMA} °C",
     )
+
     ax1.set_ylabel("Temperatura (°C)")
     ax1.set_title("Histórico de temperatura")
     ax1.legend()
     ax1.grid(alpha=0.3)
 
     # Gráfico de umidade
-    ax2.plot(datas, umidades, marker="o")
+    ax2.plot(
+        datas,
+        umidades,
+        marker="o",
+        label="Umidade",
+    )
+
     ax2.scatter(
-        [data for data, alerta in zip(datas, anomalias_umidade) if alerta],
-        [valor for valor, alerta in zip(umidades, anomalias_umidade) if alerta],
+        [
+            data
+            for data, alerta in zip(datas, anomalias_umidade)
+            if alerta
+        ],
+        [
+            valor
+            for valor, alerta in zip(umidades, anomalias_umidade)
+            if alerta
+        ],
         color="red",
         s=100,
         zorder=5,
-        label="Anomalia detectada"
+        label="Anomalia detectada",
     )
+
     ax2.axhline(
-        y=80,
+        y=UMIDADE_MAXIMA,
         color="red",
         linestyle="--",
-        label="Limite máximo: 80%"
+        label=f"Limite máximo: {UMIDADE_MAXIMA}%",
     )
+
     ax2.axhline(
-        y=40,
+        y=UMIDADE_MINIMA,
         color="orange",
         linestyle="--",
-        label="Limite mínimo: 40%"
+        label=f"Limite mínimo: {UMIDADE_MINIMA}%",
     )
+
     ax2.set_ylabel("Umidade (%)")
-    ax2.set_xlabel("Data e hora (UTC)")
+    ax2.set_xlabel("Horário da medição (UTC)")
     ax2.set_title("Histórico de umidade")
     ax2.legend()
     ax2.grid(alpha=0.3)
 
-
-    from matplotlib.dates import DateFormatter, AutoDateLocator
-
+    # Formatação do eixo temporal
     localizador = AutoDateLocator()
 
     ax2.xaxis.set_major_locator(localizador)
     ax2.xaxis.set_major_formatter(
-        DateFormatter("%H:%M:%S", tz=datas[0].tzinfo)
+        DateFormatter("%H:%M:%S", tz=timezone.utc)
     )
 
     plt.setp(
         ax2.get_xticklabels(),
         rotation=45,
-        ha="right"
+        ha="right",
     )
-
-    ax2.set_xlabel("Horário da medição (UTC)")
 
     plt.tight_layout()
 
-    plt.savefig("historico_sensores.png", dpi=150)
-    print("Gráfico salvo em historico_sensores.png")
+    # Salvar gráfico em assets/
+    DIRETORIO_ASSETS.mkdir(parents=True, exist_ok=True)
+
+    fig.savefig(
+        CAMINHO_GRAFICO,
+        dpi=150,
+        bbox_inches="tight",
+    )
+
+    print(f"Gráfico salvo em: {CAMINHO_GRAFICO}")
 
     plt.show()
+    plt.close(fig)
 
 
 if __name__ == "__main__":
     gerar_graficos()
-

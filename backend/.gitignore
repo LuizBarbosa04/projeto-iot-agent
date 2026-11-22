@@ -3,7 +3,7 @@
 .venv/
 venv/
 
-# Cache do Python
+# Cache do Python e testes
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -29,3 +29,11 @@ Thumbs.db
 
 # Relatórios gerados automaticamente
 relatorios/
+
+# Arquivos de backup e versões antigas
+archive/
+data/backups/
+
+# Arquivos temporários
+*.tmp
+*.bak
